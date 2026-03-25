@@ -258,13 +258,13 @@ app.post('/api/validate-key', async (req, res) => {
         }
 
         const row = result.rows[0];
+        const adminLevel = Number(row.is_admin) || 0;
 
         // Check if this is an admin / owner / super owner key
-        if (row.is_admin >= 1) {
-            // Admin-tier keys should be reusable for dashboard access.
-            // Track usage metadata without blocking future logins.
+        if (adminLevel >= 1) {
+            // Admin-tier keys are reusable; only track last usage metadata.
             await pool.query(
-                'UPDATE access_keys SET is_used = 1, used_at = NOW(), used_by_ip = $1 WHERE id = $2',
+                'UPDATE access_keys SET used_at = NOW(), used_by_ip = $1 WHERE id = $2',
                 [clientIp, row.id]
             );
             
@@ -273,9 +273,9 @@ app.post('/api/validate-key', async (req, res) => {
                     keyId: row.id, 
                     keyCode: row.key_code, 
                     isAdmin: true,
-                    isOwner: row.is_admin >= 2,
-                    isSuperOwner: row.is_admin === 3,
-                    role: row.is_admin === 3 ? 'superowner' : row.is_admin === 2 ? 'owner' : 'admin'
+                    isOwner: adminLevel >= 2,
+                    isSuperOwner: adminLevel === 3,
+                    role: adminLevel === 3 ? 'superowner' : adminLevel === 2 ? 'owner' : 'admin'
                 },
                 JWT_SECRET,
                 { expiresIn: '7d' }
@@ -285,10 +285,10 @@ app.post('/api/validate-key', async (req, res) => {
                 valid: true,
                 token: token,
                 isAdmin: true,
-                isOwner: row.is_admin >= 2,
-                isSuperOwner: row.is_admin === 3,
-                role: row.is_admin === 3 ? 'superowner' : row.is_admin === 2 ? 'owner' : 'admin',
-                message: row.is_admin === 3 ? 'Super Owner access granted' : row.is_admin === 2 ? 'Owner access granted' : 'Admin access granted',
+                isOwner: adminLevel >= 2,
+                isSuperOwner: adminLevel === 3,
+                role: adminLevel === 3 ? 'superowner' : adminLevel === 2 ? 'owner' : 'admin',
+                message: adminLevel === 3 ? 'Super Owner access granted' : adminLevel === 2 ? 'Owner access granted' : 'Admin access granted',
                 redirectTo: '/admin.html'
             });
         }
