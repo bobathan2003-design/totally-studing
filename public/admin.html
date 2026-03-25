@@ -490,49 +490,59 @@
         let allKeys = [];
         let currentFilter = 'all';
         let isOwner = false;
+        let isSuperOwner = false;
+
+        function decodeJwtPayload(token) {
+            try {
+                const base64Url = token.split('.')[1];
+                if (!base64Url) return null;
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+                return JSON.parse(atob(padded));
+            } catch (e) {
+                return null;
+            }
+        }
 
         // Check if already logged in with admin key
         window.addEventListener('load', async () => {
             const token = localStorage.getItem('accessToken');
-            
+
             if (!token) {
-                // No token, redirect to main page to enter admin key
                 alert('Please enter your admin key at the main page');
                 window.location.href = '/';
                 return;
             }
 
+            const payload = decodeJwtPayload(token);
+            if (!payload || !payload.isAdmin) {
+                localStorage.removeItem('accessToken');
+                alert('You need an admin key to access this page');
+                window.location.href = '/games.html';
+                return;
+            }
+
+            adminToken = token;
+            isOwner = payload.isOwner || payload.isSuperOwner || false;
+            isSuperOwner = payload.isSuperOwner || false;
+            showAdminPanel();
+
+            // Best-effort session verification: don't force logout on transient API/auth issues.
             try {
-                // Verify token is valid and is admin
                 const response = await fetch('/api/verify-session', {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
                 });
-                
                 if (response.ok) {
                     const data = await response.json();
-                    
-                    // Decode token to check if admin (simple check)
-                    const payload = JSON.parse(atob(token.split('.')[1]));
-                    
-                    if (payload.isAdmin) {
-                        adminToken = token;
-                        isOwner = payload.isOwner || false;
-                        showAdminPanel();
-                    } else {
-                        alert('You need an admin key to access this page');
-                        window.location.href = '/games.html';
-                    }
+                    isOwner = data.isOwner || data.isSuperOwner || isOwner;
+                    isSuperOwner = data.isSuperOwner || isSuperOwner;
                 } else {
-                    // Token expired
-                    localStorage.removeItem('accessToken');
-                    window.location.href = '/';
+                    console.warn('Session verification failed; continuing with local token claims.');
                 }
             } catch (error) {
-                console.error('Auth error:', error);
-                localStorage.removeItem('accessToken');
-                window.location.href = '/';
+                console.warn('Auth check warning:', error);
             }
         });
 
@@ -540,7 +550,7 @@
             document.getElementById('adminPanel').classList.add('show');
             
             // Show Generate Owner Key button only for super owners
-            if (payload.isSuperOwner) {
+            if (isSuperOwner) {
                 document.getElementById('generateOwnerKeyBtn').style.display = 'inline-block';
             }
             // Show Generate Admin Key button only for owners
@@ -556,7 +566,7 @@
                 loadGameRequests();
                 loadBrokenGames();
 
-                if (payload.isSuperOwner) {
+                if (isSuperOwner) {
                     document.getElementById('maintenanceSection').style.display = 'block';
                     loadMaintenanceStatus();
                 }
@@ -1048,12 +1058,12 @@ document.addEventListener('keydown', function(e) {
         if (document.getElementById('theme')) document.getElementById('theme').value = settings.theme || 'default';
         const token = localStorage.getItem('accessToken');
         if (token && document.getElementById('currentKey')) {
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
+            const payload = decodeJwtPayload(token);
+            if (payload) {
                 document.getElementById('currentKey').value = payload.keyCode || 'N/A';
-                const role = payload.isOwner ? 'Owner' : (payload.isAdmin ? 'Admin' : 'Regular');
+                const role = payload.isSuperOwner ? 'Super Owner' : (payload.isOwner ? 'Owner' : (payload.isAdmin ? 'Admin' : 'Regular'));
                 document.getElementById('keyType').value = role;
-            } catch (e) {}
+            }
         }
     }
     function saveSettings() {
