@@ -512,13 +512,10 @@
                 
                 if (response.ok) {
                     const data = await response.json();
-                    
-                    // Decode token to check if admin (simple check)
-                    const payload = JSON.parse(atob(token.split('.')[1]));
-                    
-                    if (payload.isAdmin) {
+
+                    if (data.isAdmin) {
                         adminToken = token;
-                        isOwner = payload.isOwner || false;
+                        isOwner = data.isOwner || data.isSuperOwner || false;
                         showAdminPanel();
                     } else {
                         alert('You need an admin key to access this page');
