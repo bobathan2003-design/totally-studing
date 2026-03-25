@@ -679,7 +679,7 @@
         }
 
         function updateStats(keys) {
-            const regularKeys = keys.filter(k => k.is_admin === 0 || k.is_admin === false);
+            const regularKeys = keys.filter(k => Number(k.is_admin) === 0);
             const total = keys.length; // Include admin keys in total
             const used = regularKeys.filter(k => (k.is_used === 1 || k.is_used === true) && (k.is_revoked === 0 || k.is_revoked === false)).length;
             const revoked = regularKeys.filter(k => k.is_revoked === 1 || k.is_revoked === true).length;
@@ -707,19 +707,19 @@
             
             if (filter === 'unused') {
                 filteredKeys = allKeys.filter(k => 
-                    (k.is_admin === 0 || k.is_admin === false) &&
+                    Number(k.is_admin) === 0 &&
                     (k.is_used === 0 || k.is_used === false) && 
                     (k.is_revoked === 0 || k.is_revoked === false)
                 );
             } else if (filter === 'used') {
                 filteredKeys = allKeys.filter(k => 
-                    (k.is_admin === 0 || k.is_admin === false) &&
+                    Number(k.is_admin) === 0 &&
                     (k.is_used === 1 || k.is_used === true) && 
                     (k.is_revoked === 0 || k.is_revoked === false)
                 );
             } else if (filter === 'revoked') {
                 filteredKeys = allKeys.filter(k => 
-                    (k.is_admin === 0 || k.is_admin === false) &&
+                    Number(k.is_admin) === 0 &&
                     (k.is_revoked === 1 || k.is_revoked === true)
                 );
             }
@@ -760,8 +760,9 @@
                 const createdDate = new Date(key.created_at).toLocaleString();
                 const usedDate = key.used_at ? new Date(key.used_at).toLocaleString() : '-';
                 
-                const isKeyOwner = key.is_admin === 2;
-                const isKeyAdmin = key.is_admin === 1;
+                const adminLevel = Number(key.is_admin) || 0;
+                const isKeyOwner = adminLevel === 2;
+                const isKeyAdmin = adminLevel === 1;
                 const isRevoked = key.is_revoked === 1 || key.is_revoked === true;
                 const isUsed = key.is_used === 1 || key.is_used === true;
                 
@@ -770,7 +771,7 @@
                 let keyType = 'Regular';
                 let keyTypeClass = 'status-unused';
                 
-                const isKeySuperOwner = key.is_admin === 3;
+                const isKeySuperOwner = adminLevel === 3;
 
                 if (isKeySuperOwner) {
                     keyType = '⚡ Super Owner';
