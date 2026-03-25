@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Soccer Skills Euro Cup</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <style>
+        body { margin: 0px; padding: 0px; overflow: hidden; background: #000; }
+        @font-face {
+            font-family: TekoSkills;
+            src: url(https://godzilla214.github.io/soccer-skills/data/Teko-Medium.ttf);
+        }
+        * { font-family: TekoSkills; }
+    </style>
+    <script>
+        const BASE = "https://godzilla214.github.io/soccer-skills/";
+
+        // ── URL fixer ──────────────────────────────────────────────────
+        function fixUrl(val) {
+            if (typeof val !== 'string') return val;
+            if (val.indexOf('godzilla214.github.io') !== -1) return val;
+            if (val.indexOf('blob:') === 0 || val.indexOf('data:') === 0) return val;
+            if (val.indexOf('http:') === 0 || val.indexOf('https:') === 0 || val.indexOf('//') === 0) return val;
+            if (val.indexOf('/js/main.js') !== -1) return val; // let this 404 silently
+            let decoded = val;
+            try { decoded = decodeURIComponent(val); } catch(e) {}
+            if (decoded.indexOf('file:') === 0) {
+                const m = decoded.match(/\/(data|marc|assets|images|sounds|audio)\/.+$/);
+                if (m) return BASE + m[0].replace(/^\//, '');
+                return BASE + decoded.replace(/\\/g, '/').split('/').pop().split('?')[0];
+            }
+            return BASE + val;
+        }
+
+        // ── Fetch ──────────────────────────────────────────────────────
+        const _origFetch = window.fetch;
+        window.fetch = async function(url, opts) {
+            if (typeof url === 'string') url = fixUrl(url);
+            return _origFetch.call(this, url, opts);
+        };
+
+        // ── XHR ────────────────────────────────────────────────────────
+        const _origXHROpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url, ...args) {
+            if (typeof url === 'string') url = fixUrl(url);
+            return _origXHROpen.call(this, method, url, ...args);
+        };
+
+        // ── Image src ──────────────────────────────────────────────────
+        const _origImgSrcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+        const _origCreateElement = document.createElement.bind(document);
+        document.createElement = function(tag, ...args) {
+            const el = _origCreateElement(tag, ...args);
+            if (typeof tag === 'string' && tag.toLowerCase() === 'img') el.crossOrigin = 'anonymous';
+            return el;
+        };
+        Object.defineProperty(HTMLImageElement.prototype, 'src', {
+            get() { return _origImgSrcDesc.get.call(this); },
+            set(val) {
+                this.crossOrigin = 'anonymous';
+                _origImgSrcDesc.set.call(this, fixUrl(val));
+            },
+            configurable: true
+        });
+
+        // ── Audio src ──────────────────────────────────────────────────
+        const _origAudioSrcDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+        if (_origAudioSrcDesc) {
+            Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+                get() { return _origAudioSrcDesc.get.call(this); },
+                set(val) { _origAudioSrcDesc.set.call(this, fixUrl(val)); },
+                configurable: true
+            });
+        }
+
+        // ── Canvas CORS guard ──────────────────────────────────────────
+        const _origGetCtx = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function(type, opts) {
+            const ctx = _origGetCtx.call(this, type, opts);
+            if (type === '2d' && ctx && !ctx._patched) {
+                ctx._patched = true;
+                const _origGID = ctx.getImageData.bind(ctx);
+                ctx.getImageData = function(...args) {
+                    try { return _origGID(...args); }
+                    catch(e) { return ctx.createImageData(args[2]||1, args[3]||1); }
+                };
+            }
+            return ctx;
+        };
+
+        // ── WebGL CORS guard ───────────────────────────────────────────
+        const _origTexImage2D = WebGLRenderingContext.prototype.texImage2D;
+        WebGLRenderingContext.prototype.texImage2D = function(...args) {
+            try { return _origTexImage2D.apply(this, args); }
+            catch(e) { if (e.name !== 'SecurityError') throw e; }
+        };
+
+        // ── Script src ─────────────────────────────────────────────────
+        const _origSrcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+        Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+            get() { return _origSrcDesc.get.call(this); },
+            set(val) {
+                if (typeof val === 'string' && val.indexOf('/js/main.js') !== -1) return; // skip 404
+                _origSrcDesc.set.call(this, fixUrl(val));
+            },
+            configurable: true
+        });
+
+        // ── Link href ──────────────────────────────────────────────────
+        const _origSetAttr = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function(name, val) {
+            if (this.tagName === 'LINK' && name === 'href') return _origSetAttr.call(this, name, fixUrl(String(val)));
+            return _origSetAttr.call(this, name, val);
+        };
+
+        // ── GD Ads SDK stub ────────────────────────────────────────────
+        window["GD_OPTIONS"] = {
+            gameId: "899c82ac71ba4dd5a571fc9bc35f55f8",
+            onEvent: function(event) {}
+        };
+        window.gdsdk = {
+            showAd: function() { return Promise.resolve(); },
+            preloadAd: function() { return Promise.resolve(); },
+            cancelAd: function() { return Promise.resolve(); },
+            showBanner: function() {},
+            hideBanner: function() {},
+            addEventListener: function() {},
+            removeEventListener: function() {},
+        };
+
+        // ── Device detection (copied from original) ────────────────────
+        var isphone = false;
+        if (navigator.userAgent.match(/Android/i) || navigator.userAgent.match(/BlackBerry/i) ||
+            navigator.userAgent.match(/iPhone|iPad|iPod/i) || navigator.userAgent.match(/Opera Mini/i) ||
+            navigator.userAgent.match(/IEMobile/i)) { isphone = true; }
+        var isios = false;
+        if (navigator.userAgent.match(/iPhone|iPad|iPod/i)) { isios = true; }
+
+        var checkrotate = true;
+        var rosize = new Image();
+        rosize.src = isphone ? "marc/rotate.gif" : "marc/resize.gif";
+
+        var gameorigin = "crazygames";
+        var cupname = "eurocup";
+    </script>
+    <script src="https://godzilla214.github.io/soccer-skills/soccerskills.js"></script>
+</head>
+
+<body onload="setTimeout(gamerun(),100)" bgcolor="#000000" link="#D3F2FF" alink="#D3F2FF" vlink="#D3F2FF"
+    leftmargin="0" topmargin="0" margin="0" marginheight="0" marginwidth="0">
+
+    <canvas id="gamecanvas" onclick="canvasclick()"
+        style="padding-left:0; padding-right:0; margin-right:auto; margin-left:auto; display:block; width:1280px; height:720px;"
+        width="1280" height="720"></canvas>
+
+    <script>
+        var canvasElement = document.getElementById("gamecanvas");
+        canvasElement.addEventListener("mousedown", msdown, false);
+        canvasElement.addEventListener("mousemove", msmove, false);
+        canvasElement.addEventListener("mouseup", msup, false);
+        canvasElement.addEventListener("mouseout", msup, false);
+        canvasElement.addEventListener("touchmove", frmove, false);
+        canvasElement.addEventListener("touchstart", frdown, false);
+        canvasElement.addEventListener("touchend", frup, false);
+
+        var rd = canvasElement.getContext("2d");
+        var xm = 0, ym = 0;
+        var mdown = false;
+
+        function msmove(evt) {
+            var rect = canvasElement.getBoundingClientRect();
+            xm = evt.clientX - rect.left;
+            ym = evt.clientY - rect.top;
+        }
+        function msdown(evt) {
+            var rect = canvasElement.getBoundingClientRect();
+            xm = evt.clientX - rect.left;
+            ym = evt.clientY - rect.top;
+            mdown = true;
+        }
+        function msup(evt) { mdown = false; }
+
+        function frmove(evt) {
+            var cxm = 0, cym = 0;
+            for (var i = 0; i < evt.touches.length; i++) { cxm += evt.touches[i].clientX; cym += evt.touches[i].clientY; }
+            var rect = canvasElement.getBoundingClientRect();
+            xm = cxm / evt.touches.length - rect.left;
+            ym = cym / evt.touches.length - rect.top;
+        }
+        function frdown(evt) {
+            var cxm = 0, cym = 0;
+            for (var i = 0; i < evt.touches.length; i++) { cxm += evt.touches[i].clientX; cym += evt.touches[i].clientY; }
+            var rect = canvasElement.getBoundingClientRect();
+            xm = cxm / evt.touches.length - rect.left;
+            ym = cym / evt.touches.length - rect.top;
+            mdown = true;
+        }
+        function frup(evt) { mdown = false; }
+    </script>
+</body>
+</html>

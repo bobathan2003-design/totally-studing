@@ -359,7 +359,8 @@ app.get('/api/games', async (req, res) => {
                 { id: 23, title: 'Basketball Stars', url: '/games/basketballstars/', description: '1v1 basketball battles!', thumbnail: '/thumbnails/basketballstars.webp', category: 'Sports' },
                 { id: 24, title: 'Slope', url: '/games/slope/', description: 'Roll down an endless slope!', thumbnail: '/thumbnails/slope.webp', category: 'Arcade' },
                 { id: 25, title: 'Gunspin', url: '/games/gunspin/', description: 'An addictive game where you travel as far as possible by shooting a gun!', thumbnail: '/thumbnails/gunspin.webp', category: 'Action'},
-                { id: 26, title: 'Ragdoll Hit', url: '/games/ragdollhit/', description: 'Ragdoll Fighting Game!', thumbnail: '/thumbnails/ragdollhit.webp', category: 'Action'}
+                { id: 26, title: 'Ragdoll Hit', url: '/games/ragdollhit/', description: 'Ragdoll Fighting Game!', thumbnail: '/thumbnails/ragdollhit.webp', category: 'Action'},
+                { id: 27, title: 'Soccer Skills Euro Cup', url: '/games/soccerskillseurocup/', description: 'Show off your soccer skills in this fun game!', thumbnail: '/thumbnails/soccerskillseurocup.webp', category: 'Sports' }
             
         ];
 
