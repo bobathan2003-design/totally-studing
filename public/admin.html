@@ -387,6 +387,9 @@
                 <button class="btn btn-danger" id="generateAdminBtn" onclick="generateKeys(true)" style="display: none;">
                     Generate Admin Key
                 </button>
+                <button class="btn" id="generateOwnerKeyBtn" onclick="generateKeys(false, true)" style="display: none; background: linear-gradient(135deg, #f093fb, #f5576c); color: white;">
+                    👑 Generate Owner Key
+                </button>
             </div>
 
             <div class="generated-keys" id="generatedKeys">
@@ -429,6 +432,29 @@
             <div id="brokenGamesSection" class="card" style="display: none; margin-top: 20px;">
                 <h2>⚠️ Broken Games</h2>
                 <div id="brokenGamesList"></div>
+            </div>
+
+            <!-- Super Owner Only: Maintenance -->
+            <div id="maintenanceSection" class="card" style="display: none; margin-top: 20px; border: 2px solid #ff6b6b;">
+                <h2>🔧 Site Maintenance <span style="font-size:14px;color:#ff6b6b;font-weight:normal;">(Super Owner Only)</span></h2>
+                <div id="maintenanceStatus" style="margin:15px 0;padding:12px;border-radius:8px;background:#f9f9f9;">Loading...</div>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:8px;font-weight:500;">Maintenance Message</label>
+                    <textarea id="maintenanceMessage" rows="3" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;resize:vertical;" placeholder="Message shown to users during maintenance..."></textarea>
+                </div>
+                <div style="margin-bottom:20px;">
+                    <label style="display:block;margin-bottom:8px;font-weight:500;">Shutdown Mode</label>
+                    <select id="maintenanceMode" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;">
+                        <option value="page">Redirect to maintenance page</option>
+                        <option value="503">503 error (maintenance page)</option>
+                        <option value="shutdown">Kill server process</option>
+                    </select>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button onclick="activateMaintenance()" style="background:#ff6b6b;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;">🔴 Activate Maintenance</button>
+                    <button onclick="deactivateMaintenance()" style="background:#1dd1a1;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;">🟢 Deactivate Maintenance</button>
+                    <button onclick="confirmShutdown()" style="background:#2d3436;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;">💀 Shutdown Site</button>
+                </div>
             </div>
         </div>
 
@@ -513,6 +539,10 @@
         function showAdminPanel() {
             document.getElementById('adminPanel').classList.add('show');
             
+            // Show Generate Owner Key button only for super owners
+            if (payload.isSuperOwner) {
+                document.getElementById('generateOwnerKeyBtn').style.display = 'inline-block';
+            }
             // Show Generate Admin Key button only for owners
             if (isOwner) {
                 document.getElementById('generateAdminBtn').style.display = 'inline-block';
@@ -525,6 +555,11 @@
                 loadBugReports();
                 loadGameRequests();
                 loadBrokenGames();
+
+                if (payload.isSuperOwner) {
+                    document.getElementById('maintenanceSection').style.display = 'block';
+                    loadMaintenanceStatus();
+                }
             }
             
             loadKeys();
@@ -541,10 +576,10 @@
             window.location.href = '/games.html';
         }
 
-        async function generateKeys(isAdmin = false) {
-            const count = isAdmin ? 1 : parseInt(document.getElementById('keyCount').value);
+        async function generateKeys(isAdmin = false, isOwnerKey = false) {
+            const count = (isAdmin || isOwnerKey) ? 1 : parseInt(document.getElementById('keyCount').value);
             
-            if (!isAdmin && (!count || count < 1 || count > 100)) {
+            if (!isAdmin && !isOwnerKey && (!count || count < 1 || count > 100)) {
                 alert('Please enter a number between 1 and 100');
                 return;
             }
@@ -556,7 +591,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${adminToken}`
                     },
-                    body: JSON.stringify({ count, isAdmin })
+                    body: JSON.stringify({ count, isAdmin, isOwnerKey })
                 });
 
                 const data = await response.json();
@@ -725,7 +760,14 @@
                 let keyType = 'Regular';
                 let keyTypeClass = 'status-unused';
                 
-                if (isKeyOwner) {
+                const isKeySuperOwner = key.is_admin === 3;
+
+                if (isKeySuperOwner) {
+                    keyType = '⚡ Super Owner';
+                    keyTypeClass = 'status-used';
+                    status = 'Active';
+                    statusClass = 'status-unused';
+                } else if (isKeyOwner) {
                     keyType = '👑 Owner';
                     keyTypeClass = 'status-used';
                     status = 'Active';
@@ -746,7 +788,9 @@
                 let actionButtons = '-';
                 
                 // Owner keys: can never be deleted/revoked
-                if (isKeyOwner) {
+                if (isKeySuperOwner) {
+                    actionButtons = '<span style="color: #999;">⚡ Protected</span>';
+                } else if (isKeyOwner) {
                     actionButtons = '<span style="color: #999;">Protected</span>';
                 }
                 // Admin keys: only owner can manage them
@@ -800,7 +844,7 @@
                 row.innerHTML = `
                     <td>
                         <span class="key-code" onclick="copyKey('${key.key_code}')" title="Click to copy">
-                            ${isKeyOwner ? '👑 ' : (isKeyAdmin ? '🔑 ' : '')}${displayKeyCode}
+                            ${isKeySuperOwner ? '⚡ ' : (isKeyOwner ? '👑 ' : (isKeyAdmin ? '🔑 ' : ''))}${displayKeyCode}
                         </span>
                         <div style="margin-top:4px;">
                             <span id="nickname-display-${key.id}" style="font-size:12px;color:#888;font-style:italic;">
@@ -1214,6 +1258,109 @@ document.addEventListener('keydown', function(e) {
 
     // Broken Games
     let allGamesCache = [];
+
+    // MAINTENANCE FUNCTIONS
+    async function loadMaintenanceStatus() {
+        try {
+            const res = await fetch('/api/admin/maintenance', {
+                headers: { 'Authorization': 'Bearer ' + adminToken }
+            });
+            const data = await res.json();
+            const m = data.maintenance;
+            const statusEl = document.getElementById('maintenanceStatus');
+            if (m.is_active) {
+                statusEl.style.background = '#ffe0e0';
+                statusEl.innerHTML = '<strong style="color:#ff6b6b;">🔴 MAINTENANCE ACTIVE</strong> - Mode: ' + m.mode + '<br><small>Activated at: ' + new Date(m.activated_at).toLocaleString() + ' by ' + m.activated_by + '</small>';
+            } else {
+                statusEl.style.background = '#e0ffe0';
+                statusEl.innerHTML = '<strong style="color:#1dd1a1;">🟢 Site is LIVE</strong>';
+            }
+            document.getElementById('maintenanceMessage').value = m.message || '';
+            document.getElementById('maintenanceMode').value = m.mode || 'page';
+        } catch (err) {
+            document.getElementById('maintenanceStatus').textContent = 'Failed to load status';
+        }
+    }
+
+    async function activateMaintenance() {
+        const mode = document.getElementById('maintenanceMode').value;
+        const message = document.getElementById('maintenanceMessage').value;
+        if (!confirm('Are you sure you want to activate maintenance mode? Users will be blocked from the site.')) return;
+        try {
+            const res = await fetch('/api/admin/maintenance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+                body: JSON.stringify({ isActive: true, mode, message })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('Maintenance mode activated!');
+                loadMaintenanceStatus();
+            } else {
+                alert(data.error || 'Failed to activate maintenance');
+            }
+        } catch (err) {
+            alert('Failed to activate maintenance');
+        }
+    }
+
+    async function deactivateMaintenance() {
+        try {
+            const res = await fetch('/api/admin/maintenance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+                body: JSON.stringify({ isActive: false, mode: 'page', message: document.getElementById('maintenanceMessage').value })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('Maintenance mode deactivated! Site is live again.');
+                loadMaintenanceStatus();
+            } else {
+                alert(data.error || 'Failed to deactivate maintenance');
+            }
+        } catch (err) {
+            alert('Failed to deactivate maintenance');
+        }
+    }
+
+    async function confirmShutdown() {
+        const warnings = [
+            'WARNING: You are about to SHUT DOWN the entire site.',
+            'This will kick out ALL users immediately.',
+            'The server process will be killed.',
+            'Render may restart it automatically, but there will be downtime.',
+            'Are you ABSOLUTELY sure you want to do this?',
+            'This is your last chance to cancel.',
+            'Seriously, are you sure? All users will be disconnected.',
+            'There is NO undo button for this.',
+            'Final warning: The site will go COMPLETELY offline.',
+            'LAST CONFIRMATION: Type YES to confirm shutdown or cancel to abort.'
+        ];
+
+        for (let i = 0; i < 9; i++) {
+            if (!confirm(warnings[i])) {
+                alert('Shutdown cancelled.');
+                return;
+            }
+        }
+
+        const final = prompt(warnings[9]);
+        if (final !== 'YES') {
+            alert('Shutdown cancelled. You must type YES exactly.');
+            return;
+        }
+
+        try {
+            await fetch('/api/admin/maintenance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+                body: JSON.stringify({ isActive: true, mode: 'shutdown', message: 'Site has been shut down.' })
+            });
+            alert('Shutdown initiated. The server is going offline.');
+        } catch (err) {
+            alert('Shutdown command sent.');
+        }
+    }
 
     function loadBrokenGames() {
         // Load all games and broken IDs in parallel

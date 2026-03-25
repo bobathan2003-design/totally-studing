@@ -35,6 +35,43 @@ app.use('/games/buckshotroulette', (req, res, next) => {
     next();
 });
 
+// Maintenance mode middleware
+app.use(async (req, res, next) => {
+    // Skip API routes and maintenance page itself
+    if (req.path.startsWith('/api/') || req.path === '/maintenance.html') return next();
+
+    try {
+        const result = await pool.query('SELECT * FROM maintenance WHERE id = 1');
+        const m = result.rows[0];
+        if (!m || !m.is_active) return next();
+
+        // Check if super owner - allow through
+        const authHeader = req.headers.authorization;
+        const token = req.cookies?.token || null;
+        // Super owners bypass via query param or cookie (set after login)
+        // We check via a special bypass token in query string for page loads
+        const bypass = req.query._sobypass;
+        if (bypass) {
+            try {
+                const decoded = jwt.verify(bypass, JWT_SECRET);
+                if (decoded.isSuperOwner) return next();
+            } catch(e) {}
+        }
+
+        // Apply maintenance mode
+        if (m.mode === 'shutdown') {
+            process.exit(0);
+        } else if (m.mode === '503') {
+            res.status(503).sendFile('maintenance.html', { root: 'public' });
+        } else {
+            // Default: redirect to maintenance page
+            res.redirect('/maintenance.html');
+        }
+    } catch (err) {
+        next(); // If DB error, don't block site
+    }
+});
+
 app.use(express.static('public')); // Serve static files (index.html, games.html, etc.)
 
 // Initialize PostgreSQL connection
@@ -121,6 +158,22 @@ async function initDatabase() {
                 game_id INTEGER PRIMARY KEY,
                 broken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS maintenance (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                is_active INTEGER DEFAULT 0,
+                mode VARCHAR(20) DEFAULT 'page',
+                message TEXT DEFAULT 'Site is under maintenance. Check back soon!',
+                activated_at TIMESTAMP,
+                activated_by VARCHAR(255)
+            )
+        `);
+
+        // Ensure maintenance row exists
+        await pool.query(`
+            INSERT INTO maintenance (id, is_active) VALUES (1, 0) ON CONFLICT DO NOTHING
         `);
 
         // Add nickname column if it doesn't exist (for existing databases)
@@ -235,8 +288,9 @@ app.post('/api/validate-key', async (req, res) => {
                     keyId: row.id, 
                     keyCode: row.key_code, 
                     isAdmin: true,
-                    isOwner: row.is_admin === 2,
-                    role: row.is_admin === 2 ? 'owner' : 'admin'
+                    isOwner: row.is_admin >= 2,
+                    isSuperOwner: row.is_admin === 3,
+                    role: row.is_admin === 3 ? 'superowner' : row.is_admin === 2 ? 'owner' : 'admin'
                 },
                 JWT_SECRET,
                 { expiresIn: '7d' }
@@ -246,9 +300,10 @@ app.post('/api/validate-key', async (req, res) => {
                 valid: true,
                 token: token,
                 isAdmin: true,
-                isOwner: row.is_admin === 2,
-                role: row.is_admin === 2 ? 'owner' : 'admin',
-                message: row.is_admin === 2 ? 'Owner access granted' : 'Admin access granted',
+                isOwner: row.is_admin >= 2,
+                isSuperOwner: row.is_admin === 3,
+                role: row.is_admin === 3 ? 'superowner' : row.is_admin === 2 ? 'owner' : 'admin',
+                message: row.is_admin === 3 ? 'Super Owner access granted' : row.is_admin === 2 ? 'Owner access granted' : 'Admin access granted',
                 redirectTo: '/admin.html'
             });
         }
@@ -397,7 +452,7 @@ async function requireAdmin(req, res, next) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
-        // Check key still exists and is not revoked
+        // Check key still exists and is not revoked (super owners can't be revoked but check anyway)
         const keyCheck = await pool.query(
             'SELECT * FROM access_keys WHERE id = $1 AND is_revoked = 0',
             [decoded.keyId]
@@ -413,12 +468,37 @@ async function requireAdmin(req, res, next) {
     }
 }
 
+async function requireSuperOwner(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const token = authHeader.substring(7);
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (!decoded.isSuperOwner) {
+            return res.status(403).json({ error: 'Super Owner access required' });
+        }
+        const keyCheck = await pool.query('SELECT * FROM access_keys WHERE id = $1', [decoded.keyId]);
+        if (keyCheck.rows.length === 0) return res.status(401).json({ error: 'Key not found' });
+        req.user = decoded;
+        next();
+    } catch (err) {
+        res.status(401).json({ error: 'Invalid token' });
+    }
+}
+
 // ADMIN API: Generate new keys
 app.post('/api/admin/keys/generate', requireAdmin, async (req, res) => {
     const { count = 1, isAdmin = false } = req.body;
     const keys = [];
     
-    // Only owners can generate admin keys
+    const { isOwnerKey = false } = req.body;
+    // Only super owners can generate owner keys
+    if (isOwnerKey && !req.user.isSuperOwner) {
+        return res.status(403).json({ error: 'Only super owners can generate owner keys' });
+    }
+    // Only owners+ can generate admin keys
     if (isAdmin && !req.user.isOwner) {
         return res.status(403).json({ error: 'Only owners can generate admin keys' });
     }
@@ -430,7 +510,7 @@ app.post('/api/admin/keys/generate', requireAdmin, async (req, res) => {
             
             await pool.query(
                 'INSERT INTO access_keys (key_code, is_admin) VALUES ($1, $2)',
-                [key, isAdmin ? 1 : 0]
+                [key, isOwnerKey ? 2 : isAdmin ? 1 : 0]
             );
         }
 
@@ -448,8 +528,10 @@ app.get('/api/admin/keys', requireAdmin, async (req, res) => {
         
         // Admins can only see regular and admin keys (not owner keys)
         // Owners can see everything
-        if (req.user.isOwner) {
+        if (req.user.isSuperOwner) {
             query = 'SELECT * FROM access_keys ORDER BY created_at DESC';
+        } else if (req.user.isOwner) {
+            query = 'SELECT * FROM access_keys WHERE is_admin <= 2 ORDER BY created_at DESC';
         } else {
             query = 'SELECT * FROM access_keys WHERE is_admin <= 1 ORDER BY created_at DESC';
         }
@@ -482,9 +564,14 @@ app.post('/api/admin/keys/revoke/:id', requireAdmin, async (req, res) => {
             return res.status(403).json({ error: 'Only owners can revoke admin keys' });
         }
         
-        // Can't revoke owner keys
-        if (targetKeyLevel === 2) {
-            return res.status(403).json({ error: 'Cannot revoke owner keys' });
+        // Super owners can revoke anything except other super owners
+        // Owners can revoke regular and admin keys
+        // Admins can only revoke regular keys
+        if (targetKeyLevel === 3) {
+            return res.status(403).json({ error: 'Cannot revoke super owner keys' });
+        }
+        if (targetKeyLevel === 2 && !req.user.isSuperOwner) {
+            return res.status(403).json({ error: 'Only super owners can revoke owner keys' });
         }
         
         const result = await pool.query(
@@ -518,9 +605,11 @@ app.post('/api/admin/keys/unrevoke/:id', requireAdmin, async (req, res) => {
             return res.status(403).json({ error: 'Only owners can unrevoke admin keys' });
         }
         
-        // Can't unrevoke owner keys
-        if (targetKeyLevel === 2) {
-            return res.status(403).json({ error: 'Cannot unrevoke owner keys' });
+        if (targetKeyLevel === 3) {
+            return res.status(403).json({ error: 'Cannot unrevoke super owner keys' });
+        }
+        if (targetKeyLevel === 2 && !req.user.isSuperOwner) {
+            return res.status(403).json({ error: 'Only super owners can unrevoke owner keys' });
         }
         
         const result = await pool.query(
@@ -554,9 +643,11 @@ app.delete('/api/admin/keys/:id', requireAdmin, async (req, res) => {
             return res.status(403).json({ error: 'Only owners can delete admin keys' });
         }
         
-        // Can't delete owner keys
-        if (targetKeyLevel === 2) {
-            return res.status(403).json({ error: 'Cannot delete owner keys' });
+        if (targetKeyLevel === 3) {
+            return res.status(403).json({ error: 'Cannot delete super owner keys' });
+        }
+        if (targetKeyLevel === 2 && !req.user.isSuperOwner) {
+            return res.status(403).json({ error: 'Only super owners can delete owner keys' });
         }
         
         const result = await pool.query(
@@ -914,6 +1005,51 @@ app.delete('/api/admin/broken-games/:id', requireAdmin, async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: 'Failed to unmark game as broken' });
     }
+});
+
+// Public maintenance message endpoint
+app.get('/api/maintenance-message', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT message FROM maintenance WHERE id = 1');
+        res.json({ message: result.rows[0]?.message || 'Site is under maintenance.' });
+    } catch (err) {
+        res.json({ message: 'Site is under maintenance.' });
+    }
+});
+
+// MAINTENANCE API
+app.get('/api/admin/maintenance', requireSuperOwner, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM maintenance WHERE id = 1');
+        res.json({ maintenance: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch maintenance status' });
+    }
+});
+
+app.post('/api/admin/maintenance', requireSuperOwner, async (req, res) => {
+    const { isActive, mode, message } = req.body;
+    try {
+        await pool.query(
+            'UPDATE maintenance SET is_active = $1, mode = $2, message = $3, activated_at = NOW(), activated_by = $4 WHERE id = 1',
+            [isActive ? 1 : 0, mode || 'page', message || 'Site is under maintenance. Check back soon!', req.user.keyCode]
+        );
+        // If mode is shutdown, exit after responding
+        if (isActive && mode === 'shutdown') {
+            res.json({ success: true, message: 'Site shutting down...' });
+            setTimeout(() => process.exit(0), 1000);
+        } else {
+            res.json({ success: true });
+        }
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update maintenance' });
+    }
+});
+
+// Super owner bypass token endpoint
+app.get('/api/admin/so-bypass', requireSuperOwner, async (req, res) => {
+    const bypassToken = jwt.sign({ isSuperOwner: true }, JWT_SECRET, { expiresIn: '1h' });
+    res.json({ bypassToken });
 });
 
 app.listen(PORT, () => {
