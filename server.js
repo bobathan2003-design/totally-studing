@@ -258,39 +258,24 @@ app.post('/api/validate-key', async (req, res) => {
         }
 
         const row = result.rows[0];
+        const adminLevel = Number(row.is_admin) || 0;
 
-        // Check if this is an admin or owner key
-        if (row.is_admin >= 1) {
-            // For admin keys (is_admin = 1), mark as used on first use
-            if (row.is_admin === 1 && !row.is_used) {
-                await pool.query(
-                    'UPDATE access_keys SET is_used = 1, used_at = NOW(), used_by_ip = $1 WHERE id = $2',
-                    [clientIp, row.id]
-                );
-            } else if (row.is_admin === 1 && row.is_used) {
-                // Admin key already used
-                return res.status(401).json({ 
-                    valid: false, 
-                    error: 'This admin key has already been used' 
-                });
-            }
-            
-            // For owner keys (is_admin = 2), just track usage but don't mark as used
-            if (row.is_admin === 2) {
-                await pool.query(
-                    'UPDATE access_keys SET used_at = NOW(), used_by_ip = $1 WHERE id = $2',
-                    [clientIp, row.id]
-                );
-            }
+        // Check if this is an admin / owner / super owner key
+        if (adminLevel >= 1) {
+            // Admin-tier keys are reusable; only track last usage metadata.
+            await pool.query(
+                'UPDATE access_keys SET used_at = NOW(), used_by_ip = $1 WHERE id = $2',
+                [clientIp, row.id]
+            );
             
             const token = jwt.sign(
                 { 
                     keyId: row.id, 
                     keyCode: row.key_code, 
                     isAdmin: true,
-                    isOwner: row.is_admin >= 2,
-                    isSuperOwner: row.is_admin === 3,
-                    role: row.is_admin === 3 ? 'superowner' : row.is_admin === 2 ? 'owner' : 'admin'
+                    isOwner: adminLevel >= 2,
+                    isSuperOwner: adminLevel === 3,
+                    role: adminLevel === 3 ? 'superowner' : adminLevel === 2 ? 'owner' : 'admin'
                 },
                 JWT_SECRET,
                 { expiresIn: '7d' }
@@ -300,10 +285,10 @@ app.post('/api/validate-key', async (req, res) => {
                 valid: true,
                 token: token,
                 isAdmin: true,
-                isOwner: row.is_admin >= 2,
-                isSuperOwner: row.is_admin === 3,
-                role: row.is_admin === 3 ? 'superowner' : row.is_admin === 2 ? 'owner' : 'admin',
-                message: row.is_admin === 3 ? 'Super Owner access granted' : row.is_admin === 2 ? 'Owner access granted' : 'Admin access granted',
+                isOwner: adminLevel >= 2,
+                isSuperOwner: adminLevel === 3,
+                role: adminLevel === 3 ? 'superowner' : adminLevel === 2 ? 'owner' : 'admin',
+                message: adminLevel === 3 ? 'Super Owner access granted' : adminLevel === 2 ? 'Owner access granted' : 'Admin access granted',
                 redirectTo: '/admin.html'
             });
         }
@@ -362,7 +347,14 @@ app.get('/api/verify-session', async (req, res) => {
             return res.status(401).json({ valid: false, error: 'Key has been revoked or deleted' });
         }
         
-        res.json({ valid: true, keyId: decoded.keyId });
+        res.json({
+            valid: true,
+            keyId: decoded.keyId,
+            isAdmin: !!decoded.isAdmin,
+            isOwner: !!decoded.isOwner,
+            isSuperOwner: !!decoded.isSuperOwner,
+            role: decoded.role || (decoded.isSuperOwner ? 'superowner' : decoded.isOwner ? 'owner' : decoded.isAdmin ? 'admin' : 'regular')
+        });
     } catch (err) {
         res.status(401).json({ valid: false, error: 'Invalid or expired token' });
     }
