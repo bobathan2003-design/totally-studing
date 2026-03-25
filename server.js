@@ -68,7 +68,8 @@ async function initDatabase() {
                 is_revoked INTEGER DEFAULT 0,
                 used_at TIMESTAMP,
                 used_by_ip VARCHAR(45),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                nickname VARCHAR(100) DEFAULT NULL
             )
         `);
 
@@ -120,6 +121,11 @@ async function initDatabase() {
                 game_id INTEGER PRIMARY KEY,
                 broken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        `);
+
+        // Add nickname column if it doesn't exist (for existing databases)
+        await pool.query(`
+            ALTER TABLE access_keys ADD COLUMN IF NOT EXISTS nickname VARCHAR(100) DEFAULT NULL
         `);
         
         // Create a default owner key on first run
@@ -849,6 +855,27 @@ app.delete('/api/admin/bug-reports/:id', requireAdmin, async (req, res) => {
     } catch (err) {
         console.error('Error deleting bug report:', err);
         res.status(500).json({ error: 'Failed to delete bug report' });
+    }
+});
+
+// NICKNAME API
+app.patch('/api/admin/keys/:id/nickname', requireAdmin, async (req, res) => {
+    const { nickname } = req.body;
+    const keyId = req.params.id;
+    try {
+        // Check target key exists
+        const keyCheck = await pool.query('SELECT is_admin FROM access_keys WHERE id = $1', [keyId]);
+        if (keyCheck.rows.length === 0) return res.status(404).json({ error: 'Key not found' });
+        // Only owner can nickname owner/admin keys
+        const targetLevel = keyCheck.rows[0].is_admin;
+        if (targetLevel >= 1 && !req.user.isOwner) {
+            return res.status(403).json({ error: 'Only owners can nickname admin keys' });
+        }
+        const trimmed = nickname ? nickname.trim().slice(0, 100) : null;
+        await pool.query('UPDATE access_keys SET nickname = $1 WHERE id = $2', [trimmed || null, keyId]);
+        res.json({ success: true, nickname: trimmed || null });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update nickname' });
     }
 });
 

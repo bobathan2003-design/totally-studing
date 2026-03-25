@@ -802,6 +802,19 @@
                         <span class="key-code" onclick="copyKey('${key.key_code}')" title="Click to copy">
                             ${isKeyOwner ? '👑 ' : (isKeyAdmin ? '🔑 ' : '')}${displayKeyCode}
                         </span>
+                        <div style="margin-top:4px;">
+                            <span id="nickname-display-${key.id}" style="font-size:12px;color:#888;font-style:italic;">
+                                ${key.nickname ? key.nickname : '<span style="color:#ccc;">No nickname</span>'}
+                            </span>
+                            <button onclick="editNickname(${key.id})" style="background:none;border:none;cursor:pointer;font-size:12px;color:#667eea;margin-left:4px;" title="Edit nickname">✏️</button>
+                        </div>
+                        <div id="nickname-edit-${key.id}" style="display:none;margin-top:4px;display:none;">
+                            <input type="text" id="nickname-input-${key.id}" placeholder="Enter nickname..." maxlength="100"
+                                style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;width:150px;"
+                                value="${key.nickname || ''}">
+                            <button onclick="saveNickname(${key.id})" style="background:#667eea;color:white;border:none;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer;margin-left:4px;">Save</button>
+                            <button onclick="cancelNickname(${key.id})" style="background:#e0e0e0;color:#333;border:none;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer;">Cancel</button>
+                        </div>
                     </td>
                     <td>
                         <span class="status-badge ${keyTypeClass}">
@@ -826,7 +839,40 @@
             container.appendChild(table);
         }
 
-        async function revokeKey(keyId, keyCode) {
+        function editNickname(keyId) {
+        document.getElementById('nickname-display-' + keyId).parentElement.style.display = 'none';
+        document.getElementById('nickname-edit-' + keyId).style.display = 'block';
+        document.getElementById('nickname-input-' + keyId).focus();
+    }
+
+    function cancelNickname(keyId) {
+        document.getElementById('nickname-edit-' + keyId).style.display = 'none';
+        document.getElementById('nickname-display-' + keyId).parentElement.style.display = 'block';
+    }
+
+    async function saveNickname(keyId) {
+        const input = document.getElementById('nickname-input-' + keyId);
+        const nickname = input.value.trim();
+        try {
+            const res = await fetch('/api/admin/keys/' + keyId + '/nickname', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+                body: JSON.stringify({ nickname })
+            });
+            const data = await res.json();
+            if (data.success) {
+                const display = document.getElementById('nickname-display-' + keyId);
+                display.innerHTML = data.nickname ? data.nickname : '<span style="color:#ccc;">No nickname</span>';
+                cancelNickname(keyId);
+            } else {
+                alert(data.error || 'Failed to save nickname');
+            }
+        } catch (err) {
+            alert('Failed to save nickname');
+        }
+    }
+
+    async function revokeKey(keyId, keyCode) {
             if (!confirm(`Revoke key ${keyCode}? The user will lose access immediately.`)) {
                 return;
             }
