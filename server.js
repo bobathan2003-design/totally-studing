@@ -347,7 +347,14 @@ app.get('/api/verify-session', async (req, res) => {
             return res.status(401).json({ valid: false, error: 'Key has been revoked or deleted' });
         }
         
-        res.json({ valid: true, keyId: decoded.keyId });
+        res.json({
+            valid: true,
+            keyId: decoded.keyId,
+            isAdmin: !!decoded.isAdmin,
+            isOwner: !!decoded.isOwner,
+            isSuperOwner: !!decoded.isSuperOwner,
+            role: decoded.role || (decoded.isSuperOwner ? 'superowner' : decoded.isOwner ? 'owner' : decoded.isAdmin ? 'admin' : 'regular')
+        });
     } catch (err) {
         res.status(401).json({ valid: false, error: 'Invalid or expired token' });
     }
