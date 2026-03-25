@@ -259,29 +259,14 @@ app.post('/api/validate-key', async (req, res) => {
 
         const row = result.rows[0];
 
-        // Check if this is an admin or owner key
+        // Check if this is an admin / owner / super owner key
         if (row.is_admin >= 1) {
-            // For admin keys (is_admin = 1), mark as used on first use
-            if (row.is_admin === 1 && !row.is_used) {
-                await pool.query(
-                    'UPDATE access_keys SET is_used = 1, used_at = NOW(), used_by_ip = $1 WHERE id = $2',
-                    [clientIp, row.id]
-                );
-            } else if (row.is_admin === 1 && row.is_used) {
-                // Admin key already used
-                return res.status(401).json({ 
-                    valid: false, 
-                    error: 'This admin key has already been used' 
-                });
-            }
-            
-            // For owner keys (is_admin = 2), just track usage but don't mark as used
-            if (row.is_admin === 2) {
-                await pool.query(
-                    'UPDATE access_keys SET used_at = NOW(), used_by_ip = $1 WHERE id = $2',
-                    [clientIp, row.id]
-                );
-            }
+            // Admin-tier keys should be reusable for dashboard access.
+            // Track usage metadata without blocking future logins.
+            await pool.query(
+                'UPDATE access_keys SET is_used = 1, used_at = NOW(), used_by_ip = $1 WHERE id = $2',
+                [clientIp, row.id]
+            );
             
             const token = jwt.sign(
                 { 
