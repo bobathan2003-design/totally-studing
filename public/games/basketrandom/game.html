@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Basket Random</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+canvas { display: block; }
+</style>
+<script>
+window.addEventListener("keydown", function(e) {
+    if([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) e.preventDefault();
+}, false);
+
+const BASE = "https://cdn.jsdelivr.net/gh/spew45/simple-games-assets@main/src/basket-random/";
+const WORKER_FILES = ['dispatchworker.js', 'jobworker.js'];
+
+function fixUrl(val) {
+    if (typeof val !== 'string') return val;
+    if (val.indexOf('cdn.jsdelivr.net') !== -1) return val;
+    if (val.indexOf('blob:') === 0 || val.indexOf('data:') === 0) return val;
+
+    let decoded = val;
+    try { decoded = decodeURIComponent(val); } catch(e) {}
+
+    // file:// local path — extract relative portion
+    if (decoded.indexOf('file:') === 0) {
+        const m = decoded.match(/\/(scripts|images|media|data|audio|sound|fonts)\/.+$/);
+        if (m) return BASE + m[0].replace(/^\//, '');
+        const name = decoded.replace(/\\/g, '/').split('/').pop();
+        return BASE + name;
+    }
+
+    // absolute http(s) on same origin — redirect known asset dirs to CDN
+    if (decoded.indexOf('http:') === 0 || decoded.indexOf('https:') === 0 || decoded.indexOf('//') === 0) {
+        try {
+            const u = new URL(decoded, window.location.href);
+            if (u.origin === window.location.origin) {
+                const m = u.pathname.match(/\/(scripts|images|media|data|audio|sound|fonts)\/.+$/);
+                if (m) return BASE + m[0].replace(/^\//, '');
+            }
+        } catch(e) {}
+        return val;
+    }
+
+    // plain relative path
+    return BASE + decoded;
+}
+
+const WORKER_PATCH = `
+var __BASE="${BASE}";
+function __isAbs(u){return !u||u.indexOf('blob:')===0||u.indexOf('data:')===0||u.indexOf('http:')===0||u.indexOf('https:')===0||u.indexOf('//')===0;}
+var __origIS=self.importScripts;
+self.importScripts=function(){var a=[];for(var i=0;i<arguments.length;i++){var u=arguments[i];a.push(__isAbs(u)?u:__BASE+u);}return __origIS.apply(self,a);};
+var __origF=self.fetch;
+self.fetch=function(url,opts){if(typeof url==='string'&&!__isAbs(url))url=__BASE+url;return __origF.call(self,url,opts);};
+`;
+
+const _origFetch = window.fetch;
+window.fetch = async function(url, opts) {
+    let finalUrl = url;
+    let isWorker = false;
+
+    if (typeof url === 'string') {
+        const name = url.split('/').pop();
+        if (WORKER_FILES.indexOf(name) !== -1) {
+            finalUrl = BASE + 'scripts/' + name;
+            isWorker = true;
+        } else {
+            finalUrl = fixUrl(url);
+            if (finalUrl !== url) console.log('fetch fixed:', url.slice(0,60), '->', finalUrl.slice(0,80));
+        }
+    }
+
+    const response = await _origFetch.call(this, finalUrl, opts);
+    if (isWorker) {
+        const _origText = response.text.bind(response);
+        response.blob = async function() {
+            const src = await _origText();
+            return new Blob([WORKER_PATCH + '\n' + src], { type: 'application/javascript' });
+        };
+        response.text = async function() {
+            return WORKER_PATCH + '\n' + (await _origText());
+        };
+    }
+    return response;
+};
+
+const _OrigURL = window.URL;
+window.URL = function(url, base) {
+    if (typeof url === 'string') {
+        const name = url.split('/').pop();
+        if (WORKER_FILES.indexOf(name) !== -1) {
+            return new _OrigURL(BASE + 'scripts/' + name);
+        }
+    }
+    return new _OrigURL(url, base);
+};
+window.URL.createObjectURL = _OrigURL.createObjectURL.bind(_OrigURL);
+window.URL.revokeObjectURL  = _OrigURL.revokeObjectURL.bind(_OrigURL);
+window.URL.prototype = _OrigURL.prototype;
+
+const _origSrcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+    get() { return _origSrcDesc.get.call(this); },
+    set(val) {
+        const fixed = fixUrl(val);
+        if (fixed !== val) console.log('src fixed:', val.slice(0,60), '->', fixed.slice(0,80));
+        _origSrcDesc.set.call(this, fixed);
+    },
+    configurable: true
+});
+
+const _origXHROpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, ...args) {
+    if (typeof url === 'string') {
+        const fixed = fixUrl(url);
+        if (fixed !== url) console.log('XHR fixed:', url.slice(0,60), '->', fixed.slice(0,80));
+        url = fixed;
+    }
+    return _origXHROpen.call(this, method, url, ...args);
+};
+
+const _origCE = document.createElement.bind(document);
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const s = _origCE('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+}
+
+async function init() {
+    await loadScript(BASE + 'box2d.wasm.js');
+    await loadScript(BASE + 'scripts/supportcheck.js');
+    await loadScript(BASE + 'scripts/offlineclient.js');
+    await loadScript(BASE + 'scripts/main.js');
+    console.log('All scripts loaded');
+}
+
+init().catch(e => console.error('Init failed:', e));
+</script>
+</head>
+<body>
+<div id="fb-root"></div>
+<script>document.addEventListener('keydown',function(e){try{window.parent.postMessage({type:'keydown',key:e.key,ctrlKey:e.ctrlKey,shiftKey:e.shiftKey,altKey:e.altKey},'*')}catch(e){}});</script></body><grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration></html>
+</body>
+</html>

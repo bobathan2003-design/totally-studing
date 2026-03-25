@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no"/>
+    <title>Basketball Stars</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+        #content { width: 100%; height: 100%; display: block; position: relative; }
+        #loader { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); color: white; font-family: sans-serif; font-size: 24px; z-index: 10; }
+    </style>
+</head>
+<body>
+<div id="content"></div>
+<div id="loader">Loading ...</div>
+<script>
+const BASE = "https://playgama.cdn.msnfun.com/9mvs56r5bjwj/v1/";
+const FONT_CSS = ['AllerDisplay.css','CfCrackBold.css','impact.css','impact2.css','impact3.css'];
+
+// ── Playgama Bridge stub ───────────────────────────────────────────────
+// Game does: try { this.sdk = bridge } catch(t) {}  (bare global, not window.playgamaBridge)
+// Then calls bridge.initialize() and waits for isInitialized.
+// On showInterstitial, game waits for 'interstitialStateChanged' event before proceeding.
+function makeEmitter() {
+    const _listeners = {};
+    return {
+        on:   function(event, fn) { (_listeners[event] = _listeners[event] || []).push(fn); },
+        off:  function(event, fn) { if (_listeners[event]) _listeners[event] = _listeners[event].filter(f => f !== fn); },
+        _emit:function(event, ...args) { (_listeners[event] || []).forEach(fn => { try { fn(...args); } catch(e) {} }); }
+    };
+}
+
+const _advEmitter = makeEmitter();
+const _advertisement = Object.assign(_advEmitter, {
+    isBannerSupported: false, isInterstitialSupported: false, isRewardedSupported: false,
+    minimumDelayBetweenInterstitial: 0,
+    interstitialState: 'closed', rewardedState: 'closed',
+    showBanner:   function() { return Promise.resolve(); },
+    hideBanner:   function() { return Promise.resolve(); },
+    showInterstitial: function() {
+        const self = this;
+        setTimeout(function() { self.interstitialState = 'closed'; _advEmitter._emit('interstitialStateChanged', 'closed'); }, 50);
+        return Promise.resolve('dismissed');
+    },
+    showRewarded: function() {
+        const self = this;
+        setTimeout(function() { self.rewardedState = 'closed'; _advEmitter._emit('rewardedStateChanged', 'closed'); }, 50);
+        return Promise.resolve('rewarded');
+    },
+});
+
+window.bridge = window.playgamaBridge = window.PlaygamaBridge = {
+    initialize:     function() { return Promise.resolve(window.bridge); },
+    isInitialized:  true, version: '2.0.0',
+    EVENT_NAME: { INITIALIZED:'initialized', INTERSTITIAL_STATE_CHANGED:'interstitialStateChanged', REWARDED_STATE_CHANGED:'rewardedStateChanged', BANNER_STATE_CHANGED:'bannerStateChanged' },
+    on: function() {}, off: function() {},
+    game:        { visibilityState:'visible', start:function(){return Promise.resolve();}, stop:function(){return Promise.resolve();}, on:function(){}, off:function(){} },
+    advertisement: _advertisement,
+    storage:     { defaultType:'local_storage', isAvailable:function(){return Promise.resolve(true);}, get:function(k){try{return Promise.resolve(localStorage.getItem(k));}catch(e){return Promise.resolve(null);}}, set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}return Promise.resolve();}, delete:function(k){try{localStorage.removeItem(k);}catch(e){}return Promise.resolve();}, on:function(){}, off:function(){} },
+    platform:    { id:'msn', language:navigator.language||'en', sdk:{}, payload:null, tld:null, hasInternet:true, sendMessage:function(){return Promise.resolve();}, on:function(){}, off:function(){} },
+    player:      { isAuthorizationSupported:false, isAuthorized:false, id:null, name:'Player', photos:[], authorize:function(){return Promise.resolve();}, getDataFromStorage:function(){return Promise.resolve(null);}, setDataToStorage:function(){return Promise.resolve();}, deleteDataFromStorage:function(){return Promise.resolve();}, on:function(){}, off:function(){} },
+    social:      { isShareSupported:false, isInviteSupported:false, share:function(){return Promise.resolve();}, invite:function(){return Promise.resolve();}, on:function(){}, off:function(){} },
+    leaderboards:{ isSupported:false, setScore:function(){return Promise.resolve();}, getScore:function(){return Promise.resolve(0);}, getEntries:function(){return Promise.resolve([]);}, on:function(){}, off:function(){} },
+    payments:    { isSupported:false, purchase:function(){return Promise.resolve();}, on:function(){}, off:function(){} },
+};
+
+// ── URL fixer ─────────────────────────────────────────────────────────
+function fixUrl(val) {
+    if (typeof val !== 'string') return val;
+    if (val.indexOf('playgama.cdn.msnfun.com') !== -1) return val;
+    if (val.indexOf('blob:') === 0 || val.indexOf('data:') === 0) return val;
+    if (val.indexOf('http:') === 0 || val.indexOf('https:') === 0 || val.indexOf('//') === 0) return val;
+    let decoded = val;
+    try { decoded = decodeURIComponent(val); } catch(e) {}
+    if (decoded.indexOf('file:') === 0) {
+        const m = decoded.match(/\/(assets|js|json|images|sounds|img|media|css)\/.+$/);
+        if (m) return BASE + m[0].replace(/^\//, '');
+        return BASE + decoded.replace(/\\/g, '/').split('/').pop().split('?')[0];
+    }
+    return BASE + val;
+}
+
+// ── Canvas getImageData CORS guard ────────────────────────────────────
+const _origGetCtx = HTMLCanvasElement.prototype.getContext;
+HTMLCanvasElement.prototype.getContext = function(type, opts) {
+    const ctx = _origGetCtx.call(this, type, opts);
+    if (type === '2d' && ctx && !ctx._patched) {
+        ctx._patched = true;
+        const _origGID = ctx.getImageData.bind(ctx);
+        ctx.getImageData = function(...args) {
+            try { return _origGID(...args); }
+            catch(e) { return ctx.createImageData(args[2]||1, args[3]||1); }
+        };
+    }
+    return ctx;
+};
+
+// ── Fetch ─────────────────────────────────────────────────────────────
+const _origFetch = window.fetch;
+window.fetch = async function(url, opts) {
+    if (typeof url === 'string') url = fixUrl(url);
+    return _origFetch.call(this, url, opts);
+};
+
+// ── XHR ──────────────────────────────────────────────────────────────
+const _origXHROpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, ...args) {
+    if (typeof url === 'string') url = fixUrl(url);
+    return _origXHROpen.call(this, method, url, ...args);
+};
+
+// ── Image: pre-set crossOrigin before src so WebGL textures work ──────
+// Phaser 2 sometimes sets src before crossOrigin; patching createElement
+// ensures every <img> is born with crossOrigin='anonymous'.
+const _origImgSrcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+const _origCreateElement = document.createElement.bind(document);
+document.createElement = function(tag, ...args) {
+    const el = _origCreateElement(tag, ...args);
+    if (typeof tag === 'string' && tag.toLowerCase() === 'img') el.crossOrigin = 'anonymous';
+    return el;
+};
+Object.defineProperty(HTMLImageElement.prototype, 'src', {
+    get() { return _origImgSrcDesc.get.call(this); },
+    set(val) { this.crossOrigin = 'anonymous'; _origImgSrcDesc.set.call(this, fixUrl(val)); },
+    configurable: true
+});
+
+// ── WebGL: swallow any residual cross-origin SecurityError ────────────
+const _origTexImage2D = WebGLRenderingContext.prototype.texImage2D;
+WebGLRenderingContext.prototype.texImage2D = function(...args) {
+    try { return _origTexImage2D.apply(this, args); }
+    catch(e) { if (e.name !== 'SecurityError') throw e; }
+};
+
+// ── Script src ────────────────────────────────────────────────────────
+const _origSrcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+    get() { return _origSrcDesc.get.call(this); },
+    set(val) {
+        if (typeof val === 'string' && val.indexOf('bridge.playgama.com') !== -1) return;
+        _origSrcDesc.set.call(this, fixUrl(val));
+    },
+    configurable: true
+});
+
+// ── Link href ─────────────────────────────────────────────────────────
+const _origSetAttr = Element.prototype.setAttribute;
+Element.prototype.setAttribute = function(name, val) {
+    if (this.tagName === 'LINK' && name === 'href') return _origSetAttr.call(this, name, fixUrl(String(val)));
+    return _origSetAttr.call(this, name, val);
+};
+
+// ── Fonts ─────────────────────────────────────────────────────────────
+document.head.appendChild(Object.assign(_origCreateElement('style'), { textContent: `
+    @font-face { font-family: 'AllerDisplay'; src: local('Arial'); }
+    @font-face { font-family: 'Aller Display'; src: local('Arial'); }
+    @font-face { font-family: 'CfCrackBold'; src: local('Arial Black'); }
+    @font-face { font-family: 'Impact'; src: local('Impact'); }
+    @font-face { font-family: 'Impact2'; src: local('Impact'); }
+    @font-face { font-family: 'Impact3'; src: local('Impact'); }
+`}));
+if (document.fonts) {
+    document.fonts.check = function() { return true; };
+    document.fonts.load = function(font) { return Promise.resolve([{ family: font, status: 'loaded' }]); };
+    try { Object.defineProperty(document.fonts, 'ready', { get: () => Promise.resolve(document.fonts), configurable: true }); } catch(e) {}
+    const _OrigFF = window.FontFace;
+    window.FontFace = function(family, source, descriptors) {
+        const ff = new _OrigFF(family, source, descriptors);
+        ff.load = function() { return Promise.resolve(this); };
+        try { Object.defineProperty(ff, 'status', { get: () => 'loaded', configurable: true }); } catch(e) {}
+        return ff;
+    };
+    window.FontFace.prototype = _OrigFF.prototype;
+}
+
+// ── MutationObserver for font CSS links ───────────────────────────────
+new MutationObserver(mutations => mutations.forEach(m => m.addedNodes.forEach(node => {
+    if (node.nodeType !== 1 || node.tagName !== 'LINK') return;
+    const name = (node.getAttribute('href') || '').split('/').pop().split('?')[0];
+    if (FONT_CSS.indexOf(name) !== -1) _origSetAttr.call(node, 'href', BASE + 'assets/css/' + name);
+}))).observe(document.documentElement, { childList: true, subtree: true });
+
+// ── Script loader ─────────────────────────────────────────────────────
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const s = _origCreateElement('script');
+        _origSrcDesc.set.call(s, src);
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Script failed: ' + src));
+        document.head.appendChild(s);
+    });
+}
+
+async function init() {
+    await loadScript(BASE + 'assets/lib/nape.min.js');
+    await loadScript(BASE + 'assets/lib/phaser.min.js');
+    await loadScript(BASE + 'assets/lib/phaser-cachebuster.min.js');
+    await loadScript(BASE + 'assets/lib/phaser-super-storage.min.js');
+    await loadScript(BASE + 'assets/lib/dragonBones.min.js');
+    await loadScript(BASE + 'basketball_legends_2019.min.js?51ca62bd285a9cdad643');
+    document.getElementById('loader').style.display = 'none';
+}
+
+init().catch(console.error);
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>A Small World Cup</title>
+	<style>
+	body {
+		margin: 0;
+		padding: 0;
+		overflow: hidden;
+	}
+	#c2canvasdiv {
+		width: 100vw;
+		height: 100vh;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+	#c2canvas {
+		max-width: 100%;
+		max-height: 100%;
+	}
+	</style>
+</head>
+<body>
+	<div id="c2canvasdiv">
+		<canvas id="c2canvas">
+			<h1>Your browser does not appear to support HTML5. Please upgrade your browser.</h1>
+		</canvas>
+	</div>
+	
+	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@a25d711e6294241dd4ad89f5ef65dc6bf34fcb24/2.1min.js"></script>
+	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@a25d711e6294241dd4ad89f5ef65dc6bf34fcb24/runtime.js"></script>
+	
+	<script>
+		// Start the Construct 2 project
+		jQuery(document).ready(function () {
+			cr_createRuntime("c2canvas");
+		});
+		
+		// Pause and resume on visibility change
+		function onVisibilityChanged() {
+			if (document.hidden || document.mozHidden || document.webkitHidden || document.msHidden)
+				cr_setSuspended(true);
+			else
+				cr_setSuspended(false);
+		}
+		
+		document.addEventListener("visibilitychange", onVisibilityChanged, false);
+		document.addEventListener("mozvisibilitychange", onVisibilityChanged, false);
+		document.addEventListener("webkitvisibilitychange", onVisibilityChanged, false);
+		document.addEventListener("msvisibilitychange", onVisibilityChanged, false);
+	</script>
+<script>document.addEventListener('keydown',function(e){try{window.parent.postMessage({type:'keydown',key:e.key,ctrlKey:e.ctrlKey,shiftKey:e.shiftKey,altKey:e.altKey},'*')}catch(e){}});</script>
+</body>
+</html>

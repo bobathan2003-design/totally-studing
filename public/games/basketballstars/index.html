@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basketball Stars - Game Vault</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background 0.3s;
+        }
+
+        body[data-theme="dark"] { background: #0a0a0a; }
+        body[data-theme="light"] { background: #ffffff; }
+
+        .game-nav-bar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 10000;
+            transition: background 0.3s;
+        }
+
+        body[data-theme="dark"] .game-nav-bar { background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); }
+        body[data-theme="light"] .game-nav-bar { background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%); }
+        body[data-theme="light"] .game-nav-bar * { color: #333 !important; }
+
+        .game-nav-title { color: white; font-size: 18px; font-weight: bold; }
+
+        .nav-buttons { display: flex; gap: 10px; align-items: center; }
+
+        .nav-btn {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .nav-btn:hover { background: rgba(255,255,255,0.3); }
+
+        .game-nav-back {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+
+        .game-nav-back:hover { background: rgba(255,255,255,0.3); }
+
+        .game-frame {
+            position: absolute;
+            top: 50px; left: 0; right: 0; bottom: 0;
+            width: 100%;
+            height: calc(100vh - 50px);
+            border: none;
+        }
+
+        .settings-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 100000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .settings-modal.active { display: flex; }
+
+        .settings-content {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .close-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+
+        .settings-body { padding: 20px; overflow-y: auto; flex: 1; }
+
+        .settings-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 15px;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active { color: #667eea; border-bottom-color: #667eea; }
+
+        .settings-tab { display: none; }
+        .settings-tab.active { display: block; }
+
+        .setting-item { margin-bottom: 20px; }
+        .setting-item label { display: block; margin-bottom: 8px; font-weight: 500; color: #333; }
+
+        .setting-item input[type="text"],
+        .setting-item select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        .settings-footer {
+            padding: 20px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .save-btn {
+            padding: 10px 30px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .cancel-btn {
+            padding: 10px 30px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: #e0e0e0;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-nav-bar">
+        <div class="game-nav-title">🏀 Basketball Stars</div>
+        <div class="nav-buttons">
+            <button class="nav-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+            <button class="nav-btn" onclick="openBugReport()">🐛 Bug Report</button>
+            <button class="nav-btn" onclick="openGameRequest()">🎮 Request Game</button>
+            <button class="nav-btn" onclick="openSettings()">⚙️ Settings</button>
+            <a href="/games.html" class="game-nav-back">← Back to Games</a>
+        </div>
+    </div>
+
+    <iframe src="game.html" class="game-frame" id="gameFrame" allowfullscreen></iframe>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="settings-modal">
+        <div class="settings-content">
+            <div class="settings-header">
+                <h2>⚙️ Settings</h2>
+                <button class="close-btn" onclick="closeSettings()">✕</button>
+            </div>
+            <div class="settings-body">
+                <div class="settings-tabs">
+                    <button class="tab-btn active" onclick="switchTab('general', this)">General</button>
+                    <button class="tab-btn" onclick="switchTab('panic', this)">🚨 Panic</button>
+                    <button class="tab-btn" onclick="switchTab('account', this)">Account</button>
+                    <button class="tab-btn" onclick="switchTab('appearance', this)">Appearance</button>
+                </div>
+
+                <div id="general-tab" class="settings-tab active">
+                    <h3>General Settings</h3>
+                    <div class="setting-item" style="margin-top:15px;">
+                        <label><input type="checkbox" id="soundEnabled" checked> Enable Sound</label>
+                    </div>
+                    <div class="setting-item">
+                        <label>Volume</label>
+                        <input type="range" id="volume" min="0" max="100" value="50">
+                        <span id="volumeValue">50%</span>
+                    </div>
+                    <p style="color:#666;font-size:14px;">💡 Use the Fullscreen button in the top bar</p>
+                </div>
+
+                <div id="panic-tab" class="settings-tab">
+                    <h3>🚨 Panic Button</h3>
+                    <p style="color:#666;margin:15px 0;">Quickly hide this site when needed.</p>
+                    <div class="setting-item">
+                        <label><input type="checkbox" id="panicEnabled" checked> Enable Panic Button</label>
+                    </div>
+                    <div class="setting-item">
+                        <label>Key Combo</label>
+                        <input type="text" id="panicCombo" placeholder="Escape" readonly style="background:#f9f9f9;cursor:pointer;">
+                        <small style="color:#999;">Click the box then press your combo (e.g. Ctrl+Shift+E)</small>
+                    </div>
+                    <div class="setting-item">
+                        <label>Redirect URL</label>
+                        <input type="text" id="panicUrl" placeholder="https://www.google.com/search?q=math+homework">
+                    </div>
+                    <button onclick="testPanicButton()" style="padding:8px 20px;background:#ff6b6b;color:white;border:none;border-radius:6px;cursor:pointer;">Test Panic Button</button>
+                </div>
+
+                <div id="account-tab" class="settings-tab">
+                    <h3>Account</h3>
+                    <div class="setting-item" style="margin-top:15px;">
+                        <label>Your Key</label>
+                        <input type="text" id="currentKey" readonly>
+                    </div>
+                    <div class="setting-item">
+                        <label>Type</label>
+                        <input type="text" id="keyType" readonly>
+                    </div>
+                </div>
+
+                <div id="appearance-tab" class="settings-tab">
+                    <h3>Appearance</h3>
+                    <div class="setting-item" style="margin-top:15px;">
+                        <label>Theme</label>
+                        <select id="theme">
+                            <option value="default">Default Purple</option>
+                            <option value="dark">Dark Mode</option>
+                            <option value="light">Light Mode</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-footer">
+                <button class="save-btn" onclick="saveSettings()">Save</button>
+                <button class="cancel-btn" onclick="closeSettings()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bug Report Modal -->
+    <div id="bugReportModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:200000;justify-content:center;align-items:center;">
+        <div style="background:white;border-radius:12px;width:90%;max-width:550px;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;">
+            <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:20px;display:flex;justify-content:space-between;align-items:center;">
+                <h2 style="margin:0;font-size:20px;">🐛 Report a Bug</h2>
+                <button onclick="closeBugReport()" style="background:none;border:none;color:white;font-size:24px;cursor:pointer;">✕</button>
+            </div>
+            <div style="padding:20px;overflow-y:auto;flex:1;">
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:8px;font-weight:500;color:#333;">Title</label>
+                    <input type="text" id="bugTitle" placeholder="Brief description of the issue" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;">
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:8px;font-weight:500;color:#333;">Description</label>
+                    <textarea id="bugDescription" rows="4" placeholder="What happened? Steps to reproduce..." style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;resize:vertical;"></textarea>
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:8px;font-weight:500;color:#333;">Console Logs <span style="color:#999;font-weight:normal;">(optional)</span></label>
+                    <textarea id="bugConsoleLogs" rows="4" placeholder="Paste any console errors here (F12 > Console)..." style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:12px;resize:vertical;font-family:monospace;"></textarea>
+                </div>
+            </div>
+            <div style="padding:15px 20px;border-top:1px solid #e0e0e0;display:flex;gap:10px;justify-content:flex-end;">
+                <button onclick="submitBugReport()" style="padding:10px 25px;background:#ff6b6b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;">Submit Report</button>
+                <button onclick="closeBugReport()" style="padding:10px 25px;background:#e0e0e0;color:#333;border:none;border-radius:6px;cursor:pointer;font-size:14px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Request Modal -->
+    <div id="gameRequestModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:200000;justify-content:center;align-items:center;">
+        <div style="background:white;border-radius:12px;width:90%;max-width:500px;overflow:hidden;display:flex;flex-direction:column;">
+            <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:20px;display:flex;justify-content:space-between;align-items:center;">
+                <h2 style="margin:0;font-size:20px;">🎮 Request a Game</h2>
+                <button onclick="closeGameRequest()" style="background:none;border:none;color:white;font-size:24px;cursor:pointer;">✕</button>
+            </div>
+            <div style="padding:20px;">
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:8px;font-weight:500;color:#333;">Game Name</label>
+                    <input type="text" id="requestGameName" placeholder="What game do you want added?" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;">
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:8px;font-weight:500;color:#333;">Reason <span style="color:#999;font-weight:normal;">(optional)</span></label>
+                    <textarea id="requestReason" rows="3" placeholder="Why should we add this game?" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;resize:vertical;"></textarea>
+                </div>
+            </div>
+            <div style="padding:15px 20px;border-top:1px solid #e0e0e0;display:flex;gap:10px;justify-content:flex-end;">
+                <button onclick="submitGameRequest()" style="padding:10px 25px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;">Submit Request</button>
+                <button onclick="closeGameRequest()" style="padding:10px 25px;background:#e0e0e0;color:#333;border:none;border-radius:6px;cursor:pointer;font-size:14px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.addEventListener('DOMContentLoaded', function() {
+            applySettings(getSettings());
+        });
+
+        // Auth check - redirect to login if no valid token
+        (function() {
+            const token = localStorage.getItem('accessToken');
+            if (!token) { window.location.replace('/'); return; }
+            fetch('/api/verify-session', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            }).then(r => r.json()).then(data => {
+                if (!data.valid) {
+                    localStorage.removeItem('accessToken');
+                    window.location.replace('/');
+                }
+            }).catch(() => {
+                window.location.replace('/');
+            });
+        })();
+
+
+        function getSettings() {
+            const defaults = {
+                soundEnabled: true, volume: 50, theme: 'default',
+                panicEnabled: true, panicCombo: 'Escape',
+                panicUrl: 'https://www.google.com/search?q=math+homework'
+            };
+            const saved = localStorage.getItem('gameVaultSettings');
+            return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+        }
+
+        function openSettings() {
+            document.getElementById('settingsModal').classList.add('active');
+            loadCurrentSettings();
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.remove('active');
+        }
+
+        function switchTab(tabName, el) {
+            document.querySelectorAll('.settings-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabName + '-tab').classList.add('active');
+            if (el) el.classList.add('active');
+        }
+
+        function loadCurrentSettings() {
+            const s = getSettings();
+            document.getElementById('soundEnabled').checked = s.soundEnabled;
+            document.getElementById('volume').value = s.volume;
+            document.getElementById('volumeValue').textContent = s.volume + '%';
+            document.getElementById('theme').value = s.theme;
+            document.getElementById('panicEnabled').checked = s.panicEnabled;
+            document.getElementById('panicCombo').value = s.panicCombo;
+            document.getElementById('panicUrl').value = s.panicUrl;
+            const token = localStorage.getItem('accessToken');
+            if (token) {
+                try {
+                    const p = JSON.parse(atob(token.split('.')[1]));
+                    document.getElementById('currentKey').value = p.keyCode || 'N/A';
+                    document.getElementById('keyType').value = p.isOwner ? 'Owner' : (p.isAdmin ? 'Admin' : 'Regular');
+                } catch(e) {}
+            }
+        }
+
+        function saveSettings() {
+            const s = {
+                soundEnabled: document.getElementById('soundEnabled').checked,
+                volume: parseInt(document.getElementById('volume').value),
+                theme: document.getElementById('theme').value,
+                panicEnabled: document.getElementById('panicEnabled').checked,
+                panicCombo: document.getElementById('panicCombo').value || 'Escape',
+                panicUrl: document.getElementById('panicUrl').value || 'https://www.google.com/search?q=math+homework'
+            };
+            localStorage.setItem('gameVaultSettings', JSON.stringify(s));
+            applySettings(s);
+            alert('Settings saved!');
+            closeSettings();
+        }
+
+        function applySettings(s) {
+            document.body.setAttribute('data-theme', s.theme);
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => alert('Fullscreen failed: ' + err.message));
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Panic system
+        function checkPanicCombo(e, combo) {
+            const parts = combo.split('+').map(p => p.trim());
+            let modifiers = [], key = '';
+            for (let part of parts) {
+                if (part === 'Ctrl' || part === 'Control') modifiers.push('ctrl');
+                else if (part === 'Shift') modifiers.push('shift');
+                else if (part === 'Alt') modifiers.push('alt');
+                else key = part;
+            }
+            return (!modifiers.includes('ctrl') || e.ctrlKey) &&
+                   (!modifiers.includes('shift') || e.shiftKey) &&
+                   (!modifiers.includes('alt') || e.altKey) &&
+                   e.key.toLowerCase() === key.toLowerCase();
+        }
+
+        document.addEventListener('keydown', function(e) {
+            const s = getSettings();
+            if (s.panicEnabled && checkPanicCombo(e, s.panicCombo)) {
+                e.preventDefault();
+                window.location.replace(s.panicUrl);
+            }
+        });
+
+        // Listen for keypresses forwarded from the game iframe
+        window.addEventListener('message', function(e) {
+            const s = getSettings();
+            if (!s.panicEnabled) return;
+            const data = e.data;
+            if (!data || data.type !== 'keydown') return;
+            if (checkPanicCombo(data, s.panicCombo)) {
+                window.location.replace(s.panicUrl);
+            }
+        });
+
+        function testPanicButton() {
+            const s = getSettings();
+            if (confirm('Test panic? Redirects to: ' + s.panicUrl)) window.location.replace(s.panicUrl);
+        }
+
+        let capturingCombo = false;
+        document.getElementById('panicCombo').addEventListener('click', function() {
+            this.value = 'Press your key combination...';
+            this.style.background = '#ffffcc';
+            capturingCombo = true;
+        });
+        document.getElementById('panicCombo').addEventListener('keydown', function(e) {
+            if (!capturingCombo) return;
+            e.preventDefault();
+            let combo = [];
+            if (e.ctrlKey || e.metaKey) combo.push('Ctrl');
+            if (e.shiftKey) combo.push('Shift');
+            if (e.altKey) combo.push('Alt');
+            if (!['Control','Shift','Alt','Meta'].includes(e.key)) combo.push(e.key);
+            if (combo.length > 0) { this.value = combo.join('+'); this.style.background = '#f9f9f9'; capturingCombo = false; }
+        });
+        document.getElementById('panicCombo').addEventListener('blur', function() {
+            if (capturingCombo) { this.value = 'Escape'; this.style.background = '#f9f9f9'; capturingCombo = false; }
+        });
+
+        document.getElementById('volume').addEventListener('input', function() {
+            document.getElementById('volumeValue').textContent = this.value + '%';
+        });
+
+        document.getElementById('settingsModal').addEventListener('click', function(e) {
+            if (e.target === this) closeSettings();
+        });
+
+        // Bug Report
+        function openBugReport() { document.getElementById('bugReportModal').style.display = 'flex'; }
+        function closeBugReport() { document.getElementById('bugReportModal').style.display = 'none'; }
+
+        function submitBugReport() {
+            const title = document.getElementById('bugTitle').value;
+            const description = document.getElementById('bugDescription').value;
+            const consoleLogs = document.getElementById('bugConsoleLogs').value;
+            if (!title || !description) { alert('Please fill in title and description'); return; }
+            const token = localStorage.getItem('accessToken');
+            fetch('/api/bug-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' },
+                body: JSON.stringify({ title, description, consoleLogs })
+            })
+            .then(r => r.json())
+            .then(() => {
+                alert('Bug report submitted! Thank you.');
+                document.getElementById('bugTitle').value = '';
+                document.getElementById('bugDescription').value = '';
+                document.getElementById('bugConsoleLogs').value = '';
+                closeBugReport();
+            })
+            .catch(() => alert('Failed to submit bug report.'));
+        }
+
+        // Game Request
+        function openGameRequest() { document.getElementById('gameRequestModal').style.display = 'flex'; }
+        function closeGameRequest() { document.getElementById('gameRequestModal').style.display = 'none'; }
+
+        function submitGameRequest() {
+            const gameName = document.getElementById('requestGameName').value;
+            const reason = document.getElementById('requestReason').value;
+            if (!gameName) { alert('Please enter a game name'); return; }
+            const token = localStorage.getItem('accessToken');
+            fetch('/api/game-requests', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' },
+                body: JSON.stringify({ gameName, reason })
+            })
+            .then(r => r.json())
+            .then(() => {
+                alert('Game request submitted!');
+                document.getElementById('requestGameName').value = '';
+                document.getElementById('requestReason').value = '';
+                closeGameRequest();
+            })
+            .catch(() => alert('Failed to submit game request.'));
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
+  <meta content="utf-8" http-equiv="encoding" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, minimal-ui" />
+  <title>8 Ball Billiards Classic</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  </style>
+  <!-- Override bgLarge which 16boot.js sets as a relative CSS background-image -->
+  <style id="bgfix"></style>
+</head>
+<body>
+  <center><div id="mygame"></div></center>
+
+  <script>
+    const BASE = "https://cdn.jsdelivr.net/gh/afzalimdad9/8Ball-Pool-HTML5@main/";
+
+    function rewriteUrl(val) {
+      if (!val) return val;
+      if (val.match(/^(?:blob:|data:|http:\/\/|https:\/\/|\/\/)/)) return val;
+      if (val.startsWith('/')) val = val.slice(1);
+      return BASE + val;
+    }
+
+    // Patch XHR
+    const OrigXHR = window.XMLHttpRequest;
+    window.XMLHttpRequest = function() {
+      const xhr = new OrigXHR();
+      const origOpen = xhr.open.bind(xhr);
+      xhr.open = function(method, url, ...rest) {
+        return origOpen(method, rewriteUrl(url), ...rest);
+      };
+      return xhr;
+    };
+
+    window.gameID = "8-ball-billiards-classic";
+    window.famobi_tracking = {
+      init:function(){}, trackEvent:function(){},
+      EVENTS:{LEVEL_START:"event/level/start",LEVEL_END:"event/level/end",LEVEL_UPDATE:"event/level/update",PING:"event/ping",AD:"event/ad"}
+    };
+    window.famobi_analytics = {trackEvent:function(){},trackScreen:function(){},trackStats:function(){}};
+    window.famobi = {
+      config:{
+        features:{highscores:false,credits:true,multiplayer_local:true},
+        game_i18n:{default:{}},ads:{off:true},logging:false,
+        gameParams:{orientation:"landscape"},nextTimeout:0,
+        aid:"8-ball-billiards-classic",name:"8 Ball Billiards Classic",
+        branding_url:"#",more_games_url:"#"
+      },
+      volume:1,offsets:{top:0,right:0,bottom:0,left:0},brandingLogo:null,
+      log:function(){},warn:function(){},
+      getUrlParams:function(){return {};},
+      hasFeature:function(f){return !!this.config.features[f];},
+      getVolume:function(){return this.volume;},
+      setVolume:function(v){this.volume=v;},
+      getCurrentLanguage:function(){return "en";},
+      getOrientation:function(){return window.innerWidth>=window.innerHeight?"landscape":"portrait";},
+      getBrandingButtonImage:function(){return BASE+"html5games/images/logo.png";},
+      getMoreGamesButtonImage:function(){return BASE+"html5games/images/logo.png";},
+      __:function(){return null;},
+      getOffsets:function(){return this.offsets;},setOffsets:function(){},
+      includeCSS:function(href){var l=document.createElement('link');l.rel='stylesheet';l.type='text/css';l.href=rewriteUrl(href);document.head.appendChild(l);},
+      gameReady:function(){},playerReady:function(){},setPreloadProgress:function(){},
+      showAd:function(cb){if(typeof cb==='function')cb();},
+      showInterstitialAd:function(){return Promise.resolve();},
+      forceAd:function(){},
+      rewardedAd:function(cb){if(typeof cb==='function')cb({rewardGranted:false});},
+      hasRewardedAd:function(){return false;},
+      showLeaderboard:function(){},submitHighscore:function(){},
+      levelUp:function(){},gameOver:function(){},sendLiveScore:function(){},
+      onRequest:function(){},requestAction:function(){},
+      getConsentStatus:function(){return true;},getAppLink:function(){return "";},
+      sizeOf:function(o){return o?(o.length!==undefined?o.length:Object.keys(o).length):0;},
+      moreGamesLink:function(){},openBrandingLink:function(){},
+      onOrientationChange:function(cb){this.orientationChangeCallback=cb;},
+      sessionStorage:{
+        setItem:function(k,v){try{sessionStorage.setItem(window.gameID+':'+k,v);}catch(e){}},
+        getItem:function(k){try{return sessionStorage.getItem(window.gameID+':'+k);}catch(e){return null;}},
+        removeItem:function(k){try{sessionStorage.removeItem(window.gameID+':'+k);}catch(e){}},
+        clear:function(){}
+      },
+      localStorage:{
+        setItem:function(k,v){try{localStorage.setItem(window.gameID+':'+k,v);}catch(e){}},
+        getItem:function(k){try{return localStorage.getItem(window.gameID+':'+k);}catch(e){return null;}},
+        removeItem:function(k){try{localStorage.removeItem(window.gameID+':'+k);}catch(e){}},
+        clear:function(){}
+      },
+      game:{
+        waitingCounter:0,
+        init:function(){this.waitingCounter=0;},
+        pause:function(){try{if(window.game)window.game.paused=true;}catch(e){}},
+        resume:function(){try{if(window.game)window.game.paused=false;}catch(e){}},
+        canResume:function(){return true;},
+        isWaiting:function(){return false;},
+        setWaiting:function(){}
+      },
+      gametranslation:{
+        curLangString:"en",translationData:{},
+        init:function(){},translateString:function(){return null;},
+        translateHtml:function(e){return e;},
+        getUserLang:function(){return "en";},
+        getSupportedLanguages:function(){return ["en"];}
+      },
+      menu:{create:function(){},show:function(){},hide:function(){},hideAll:function(){}},
+      orientation:{init:function(){},update:function(){}},
+      adapters:{add:function(){return this;},run:function(){return true;},has:function(){return false;},init:function(){}},
+      requests:{onRequest:function(){},requestAction:function(){}},
+      translateHtml:function(e){return e;}
+    };
+    window.famobi_multiplayer = false;
+
+    const _origCE = document.createElement.bind(document);
+
+    const scripts = [
+      BASE + "html5games/gameapi/zepto.min.js",
+      BASE + "html5games/gameapi/detection.js",
+      BASE + "html5games/gameapi/famobi_analytics_v1.js",
+      BASE + "html5games/gameapi/fenster.js",
+      BASE + "assets/src/01phaser.js",
+      function patchPhaser() {
+        Phaser.Loader.prototype.transformUrl = function(url, file) {
+          if (!url) return false;
+          if (url.match(/^(?:blob:|data:|http:\/\/|https:\/\/|\/\/)/)) return url;
+          if (url.startsWith('/')) url = url.slice(1);
+          return BASE + url;
+        };
+        console.log('Phaser.Loader.prototype.transformUrl patched');
+      },
+      BASE + "assets/src/02Ball.js",
+      BASE + "assets/src/03contactListener.js",
+      BASE + "assets/src/04billiardPhysics.js",
+      BASE + "assets/src/05levelData.js",
+      BASE + "assets/src/06maths.js",
+      BASE + "assets/src/07vector2d.js",
+      BASE + "assets/src/08render.js",
+      BASE + "assets/src/09sound.js",
+      BASE + "assets/src/10effects.js",
+      BASE + "assets/src/11timer.js",
+      BASE + "assets/src/12load.js",
+      // Patch loadState.resizeGame to guard against null loaderCanvas after shutdown
+      function patchLoadState() {
+        const origResize = loadState.resizeGame;
+        loadState.resizeGame = function(e, s) {
+          if (!this.loaderInfo || !this.loaderInfo.loaderCanvas) return;
+          return origResize.call(this, e, s);
+        };
+        const origOnResize = loadState.onResize;
+        loadState.onResize = function(e, s) {
+          if (!this.loaderInfo || !this.loaderInfo.loaderCanvas) return;
+          return origOnResize.call(this, e, s);
+        };
+        console.log('loadState.resizeGame patched');
+      },
+      BASE + "assets/src/13mainMenu.js",
+      BASE + "assets/src/14setup.js",
+      BASE + "assets/src/15gameController.js",
+      BASE + "assets/src/16boot.js",
+    ];
+
+    function loadNext(i) {
+      if (i >= scripts.length) {
+        console.log("All scripts loaded, firing deviceready");
+        document.getElementById('bgfix').textContent =
+          'body { background-image: url("' + BASE + 'assets/img/bgLarge.png") !important; background-size: cover !important; background-position: center !important; }';
+        var e = document.createEvent("Events");
+        e.initEvent("deviceready", true, false);
+        document.dispatchEvent(e);
+        return;
+      }
+      const entry = scripts[i];
+      if (typeof entry === 'function') {
+        entry();
+        loadNext(i + 1);
+        return;
+      }
+      var s = _origCE('script');
+      s.src = entry;
+      s.onload = function() { loadNext(i + 1); };
+      s.onerror = function() {
+        console.error("Failed to load: " + entry);
+        loadNext(i + 1);
+      };
+      document.body.appendChild(s);
+    }
+
+    loadNext(0);
+  </script>
+<script>document.addEventListener('keydown',function(e){try{window.parent.postMessage({type:'keydown',key:e.key,ctrlKey:e.ctrlKey,shiftKey:e.shiftKey,altKey:e.altKey},'*')}catch(e){}});</script>
+</body>
+</html>
